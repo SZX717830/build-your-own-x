@@ -1,0 +1,926 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>影子探险 - 小熊与手电筒</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    html, body { width: 100%; height: 100%; }
+    body {
+      overflow: hidden;
+      background: #000;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    canvas { display: block; }
+
+    #ui-overlay {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    #title {
+      position: absolute;
+      top: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      color: rgba(255,255,255,0.7);
+      font-size: 14px;
+      letter-spacing: 4px;
+      text-shadow: 0 0 20px rgba(0,0,0,0.8);
+      background: rgba(0,0,0,0.4);
+      padding: 8px 20px;
+      border-radius: 20px;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      white-space: nowrap;
+    }
+
+    #controls-hint {
+      position: absolute;
+      bottom: 30px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      gap: 16px;
+      align-items: center;
+      color: rgba(255,255,255,0.5);
+      font-size: 12px;
+      background: rgba(0,0,0,0.5);
+      padding: 10px 20px;
+      border-radius: 12px;
+      backdrop-filter: blur(4px);
+      -webkit-backdrop-filter: blur(4px);
+      border: 1px solid rgba(255,255,255,0.08);
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .hint-item {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .hint-icon {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 20px;
+      height: 20px;
+      border: 1.5px solid rgba(255,255,255,0.4);
+      border-radius: 4px;
+      font-size: 10px;
+      color: rgba(255,255,255,0.6);
+    }
+
+    #loading {
+      position: fixed;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: #0a0a12;
+      z-index: 100;
+      transition: opacity 0.8s ease;
+    }
+    #loading.hidden { opacity: 0; pointer-events: none; }
+    #loading-inner {
+      text-align: center;
+      color: rgba(255,255,255,0.6);
+    }
+    #loading-inner .spinner {
+      width: 40px;
+      height: 40px;
+      border: 3px solid rgba(255,255,255,0.1);
+      border-top-color: #ffcc66;
+      border-radius: 50%;
+      animation: spin 1s linear infinite;
+      margin: 0 auto 16px;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    #loading-inner p { font-size: 14px; letter-spacing: 2px; }
+
+    @media (max-width: 768px) {
+      #title { font-size: 11px; padding: 6px 14px; top: 12px; }
+      #controls-hint { font-size: 10px; padding: 8px 14px; gap: 10px; bottom: 16px; }
+      .hint-icon { width: 16px; height: 16px; font-size: 8px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div id="loading">
+    <div id="loading-inner">
+      <div class="spinner"></div>
+      <p>影子世界加载中...</p>
+    </div>
+  </div>
+
+  <div id="ui-overlay">
+    <div id="title">🔦 影子探险 · 小熊与手电筒</div>
+    <div id="controls-hint">
+      <span class="hint-item"><span class="hint-icon">🖱</span>左键拖动 · 移动手电筒</span>
+      <span class="hint-item"><span class="hint-icon">↔</span>右键拖动 · 旋转视角</span>
+      <span class="hint-item"><span class="hint-icon">⊕</span>滚轮 · 缩放</span>
+      <span class="hint-item"><span class="hint-icon">↑↓</span>前后移动手电筒</span>
+    </div>
+  </div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+  <script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ============================================================
+// 1. SCENE SETUP
+// ============================================================
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x0a0a12);
+scene.fog = new THREE.Fog(0x0a0a12, 8, 18);
+
+const camera = new THREE.PerspectiveCamera(40, window.innerWidth / window.innerHeight, 0.1, 30);
+camera.position.set(3.5, 2.2, 5.5);
+
+let renderer;
+try {
+  renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+  renderer.shadowMap.enabled = true;
+  renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+  renderer.toneMapping = THREE.ACESFilmicToneMapping;
+  renderer.toneMappingExposure = 1.2;
+  renderer.outputColorSpace = THREE.SRGBColorSpace;
+  document.body.prepend(renderer.domElement);
+} catch (e) {
+  document.getElementById('loading').innerHTML = `
+    <div style="text-align:center;color:rgba(255,255,255,0.7);padding:20px;">
+      <p style="font-size:18px;margin-bottom:12px;">⚠️ 无法启动 3D 渲染</p>
+      <p style="font-size:13px;color:rgba(255,255,255,0.4);">您的浏览器不支持 WebGL，请使用最新版 Chrome / Firefox / Edge</p>
+    </div>
+  `;
+  throw new Error('WebGL not supported');
+}
+
+// ============================================================
+// 2. LIGHTING
+// ============================================================
+const ambient = new THREE.AmbientLight(0x1a1a3a, 0.15);
+scene.add(ambient);
+
+const fillLight = new THREE.DirectionalLight(0x446688, 0.15);
+fillLight.position.set(0, 3, 5);
+scene.add(fillLight);
+
+const hemiLight = new THREE.HemisphereLight(0x446688, 0x222244, 0.1);
+scene.add(hemiLight);
+
+// ============================================================
+// 3. WALL
+// ============================================================
+function createWallTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#c8c0b8';
+  ctx.fillRect(0, 0, 512, 512);
+
+  for (let i = 0; i < 8000; i++) {
+    const x = Math.random() * 512;
+    const y = Math.random() * 512;
+    const v = 190 + Math.random() * 50;
+    ctx.fillStyle = `rgba(${v},${v - 4},${v - 8},0.3)`;
+    ctx.fillRect(x, y, 3, 3);
+  }
+
+  ctx.globalAlpha = 0.06;
+  for (let i = 0; i < 30; i++) {
+    const y = Math.random() * 512;
+    ctx.strokeStyle = i % 2 === 0 ? '#b0a898' : '#d8d0c8';
+    ctx.lineWidth = 2 + Math.random() * 4;
+    ctx.beginPath();
+    for (let x = 0; x < 512; x += 5) {
+      ctx.lineTo(x, y + Math.sin(x * 0.02 + i) * 3);
+    }
+    ctx.stroke();
+  }
+
+  ctx.globalAlpha = 0.1;
+  for (let i = 0; i < 15; i++) {
+    const x = Math.random() * 512;
+    const y = Math.random() * 512;
+    const r = 3 + Math.random() * 8;
+    ctx.fillStyle = '#a09888';
+    ctx.beginPath();
+    ctx.arc(x, y, r, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(2, 2);
+  texture.anisotropy = 4;
+  return texture;
+}
+
+const wallMat = new THREE.MeshStandardMaterial({
+  map: createWallTexture(),
+  roughness: 0.95,
+  metalness: 0.0,
+  side: THREE.DoubleSide,
+});
+const wallGeo = new THREE.PlaneGeometry(8, 5.5);
+const wall = new THREE.Mesh(wallGeo, wallMat);
+wall.position.set(0, 0.4, -2.8);
+wall.receiveShadow = true;
+scene.add(wall);
+
+// ============================================================
+// 4. PICTURE FRAME ON WALL
+// ============================================================
+function createPictureFrame() {
+  const group = new THREE.Group();
+
+  const frameMat = new THREE.MeshStandardMaterial({
+    color: 0x6b3a2a,
+    roughness: 0.5,
+    metalness: 0.2,
+  });
+  const outerW = 0.7, outerH = 0.5, depth = 0.04;
+  const frameGeo = new THREE.BoxGeometry(outerW, outerH, depth);
+  const frame = new THREE.Mesh(frameGeo, frameMat);
+  group.add(frame);
+
+  const innerMat = new THREE.MeshStandardMaterial({
+    color: 0x8b6b4a,
+    roughness: 0.4,
+    metalness: 0.1,
+  });
+  const innerGeo = new THREE.BoxGeometry(outerW + 0.03, outerH + 0.03, depth * 0.5);
+  const inner = new THREE.Mesh(innerGeo, innerMat);
+  inner.position.z = -depth * 0.25;
+  group.add(inner);
+
+  const picCanvas = document.createElement('canvas');
+  picCanvas.width = 256;
+  picCanvas.height = 180;
+  const pctx = picCanvas.getContext('2d');
+  const skyGrad = pctx.createLinearGradient(0, 0, 0, 180);
+  skyGrad.addColorStop(0, '#87CEEB');
+  skyGrad.addColorStop(0.6, '#B0E0E6');
+  skyGrad.addColorStop(1, '#98FB98');
+  pctx.fillStyle = skyGrad;
+  pctx.fillRect(0, 0, 256, 180);
+  pctx.fillStyle = '#FFD700';
+  pctx.beginPath();
+  pctx.arc(200, 40, 25, 0, Math.PI * 2);
+  pctx.fill();
+  pctx.fillStyle = '#556B2F';
+  pctx.beginPath();
+  pctx.moveTo(0, 140);
+  pctx.lineTo(60, 60);
+  pctx.lineTo(120, 110);
+  pctx.lineTo(180, 50);
+  pctx.lineTo(256, 100);
+  pctx.lineTo(256, 180);
+  pctx.lineTo(0, 180);
+  pctx.closePath();
+  pctx.fill();
+  pctx.fillStyle = '#FFFFFF';
+  pctx.beginPath();
+  pctx.moveTo(55, 65);
+  pctx.lineTo(60, 60);
+  pctx.lineTo(65, 68);
+  pctx.closePath();
+  pctx.fill();
+  pctx.beginPath();
+  pctx.moveTo(175, 55);
+  pctx.lineTo(180, 50);
+  pctx.lineTo(185, 58);
+  pctx.closePath();
+  pctx.fill();
+
+  const picTex = new THREE.CanvasTexture(picCanvas);
+  const picMat = new THREE.MeshStandardMaterial({ map: picTex, roughness: 0.6 });
+  const picGeo = new THREE.PlaneGeometry(outerW - 0.08, outerH - 0.08);
+  const picture = new THREE.Mesh(picGeo, picMat);
+  picture.position.z = depth * 0.5 + 0.001;
+  group.add(picture);
+
+  group.position.set(1.8, 1.6, -2.75);
+  return group;
+}
+scene.add(createPictureFrame());
+
+// ============================================================
+// 5. FLOOR
+// ============================================================
+function createFloorTexture() {
+  const canvas = document.createElement('canvas');
+  canvas.width = 512;
+  canvas.height = 512;
+  const ctx = canvas.getContext('2d');
+
+  ctx.fillStyle = '#4a3528';
+  ctx.fillRect(0, 0, 512, 512);
+
+  for (let p = 0; p < 6; p++) {
+    const py = p * 85 + 10;
+    const plankColor = 60 + Math.random() * 30;
+    ctx.fillStyle = `rgb(${plankColor + 10}, ${plankColor}, ${plankColor - 5})`;
+    ctx.fillRect(0, py, 512, 80);
+
+    for (let i = 0; i < 40; i++) {
+      const gy = py + Math.random() * 80;
+      const gbright = 50 + Math.random() * 40;
+      ctx.strokeStyle = `rgba(${gbright}, ${gbright - 5}, ${gbright - 8}, 0.15)`;
+      ctx.lineWidth = 0.5 + Math.random() * 1.5;
+      ctx.beginPath();
+      for (let x = 0; x < 512; x += 4) {
+        ctx.lineTo(x, gy + Math.sin(x * 0.008 + p * 2 + i) * 2 + Math.sin(x * 0.02) * 1.5);
+      }
+      ctx.stroke();
+    }
+
+    ctx.strokeStyle = 'rgba(30,20,15,0.5)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    ctx.moveTo(0, py + 80);
+    ctx.lineTo(512, py + 80);
+    ctx.stroke();
+
+    for (let n = 0; n < 4; n++) {
+      const nx = 60 + n * 130 + Math.random() * 20;
+      ctx.fillStyle = 'rgba(20,15,10,0.4)';
+      ctx.beginPath();
+      ctx.arc(nx, py + 78, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  const texture = new THREE.CanvasTexture(canvas);
+  texture.wrapS = THREE.RepeatWrapping;
+  texture.wrapT = THREE.RepeatWrapping;
+  texture.repeat.set(3, 3);
+  texture.anisotropy = 4;
+  return texture;
+}
+
+const floorMat = new THREE.MeshStandardMaterial({
+  map: createFloorTexture(),
+  roughness: 0.85,
+  metalness: 0.0,
+  side: THREE.DoubleSide,
+});
+const floorGeo = new THREE.PlaneGeometry(10, 8);
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.rotation.x = -Math.PI / 2;
+floor.position.set(0, -0.85, 0);
+floor.receiveShadow = true;
+scene.add(floor);
+
+// ============================================================
+// 6. BEAR - Detailed Teddy Bear Model
+// ============================================================
+function createBear() {
+  const group = new THREE.Group();
+
+  const furColor = 0xC4956A;
+  const furLight = 0xE8C9A0;
+  const furDark = 0x8B6914;
+  const eyeColor = 0x1a1a1a;
+  const noseColor = 0x2a1a0a;
+
+  const furMat = new THREE.MeshStandardMaterial({
+    color: furColor, roughness: 0.85, metalness: 0.0,
+  });
+  const lightMat = new THREE.MeshStandardMaterial({
+    color: furLight, roughness: 0.9, metalness: 0.0,
+  });
+  const darkMat = new THREE.MeshStandardMaterial({
+    color: furDark, roughness: 0.9, metalness: 0.0,
+  });
+  const eyeMat = new THREE.MeshStandardMaterial({
+    color: eyeColor, roughness: 0.2, metalness: 0.1,
+  });
+  const noseMat = new THREE.MeshStandardMaterial({
+    color: noseColor, roughness: 0.5, metalness: 0.0,
+  });
+  const highlightMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff, roughness: 0, metalness: 0,
+  });
+
+  const bodyGeo = new THREE.SphereGeometry(0.5, 28, 28);
+  const body = new THREE.Mesh(bodyGeo, furMat);
+  body.scale.set(1, 1.1, 0.85);
+  body.position.y = 0.15;
+  body.castShadow = true;
+  group.add(body);
+
+  const bellyGeo = new THREE.SphereGeometry(0.32, 20, 20);
+  const belly = new THREE.Mesh(bellyGeo, lightMat);
+  belly.scale.set(1, 0.9, 0.5);
+  belly.position.set(0, 0.1, 0.4);
+  group.add(belly);
+
+  const headGeo = new THREE.SphereGeometry(0.34, 28, 28);
+  const head = new THREE.Mesh(headGeo, furMat);
+  head.position.y = 0.78;
+  head.castShadow = true;
+  group.add(head);
+
+  const snoutGeo = new THREE.SphereGeometry(0.1, 16, 16);
+  const snout = new THREE.Mesh(snoutGeo, lightMat);
+  snout.scale.set(1.2, 0.8, 0.6);
+  snout.position.set(0, 0.76, 0.32);
+  group.add(snout);
+
+  const noseGeo = new THREE.SphereGeometry(0.035, 10, 10);
+  const nose = new THREE.Mesh(noseGeo, noseMat);
+  nose.scale.set(1, 0.7, 0.8);
+  nose.position.set(0, 0.75, 0.38);
+  group.add(nose);
+
+  const eyeGeo = new THREE.SphereGeometry(0.042, 12, 12);
+  const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+  leftEye.position.set(-0.13, 0.84, 0.32);
+  group.add(leftEye);
+  const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+  rightEye.position.set(0.13, 0.84, 0.32);
+  group.add(rightEye);
+
+  const hlGeo = new THREE.SphereGeometry(0.014, 8, 8);
+  const leftHL = new THREE.Mesh(hlGeo, highlightMat);
+  leftHL.position.set(-0.11, 0.86, 0.36);
+  group.add(leftHL);
+  const rightHL = new THREE.Mesh(hlGeo, highlightMat);
+  rightHL.position.set(0.15, 0.86, 0.36);
+  group.add(rightHL);
+
+  const earGeo = new THREE.SphereGeometry(0.12, 16, 16);
+  const leftEar = new THREE.Mesh(earGeo, furMat);
+  leftEar.scale.set(1, 0.8, 0.8);
+  leftEar.position.set(-0.26, 1.04, 0);
+  leftEar.castShadow = true;
+  group.add(leftEar);
+  const rightEar = new THREE.Mesh(earGeo, furMat);
+  rightEar.scale.set(1, 0.8, 0.8);
+  rightEar.position.set(0.26, 1.04, 0);
+  rightEar.castShadow = true;
+  group.add(rightEar);
+
+  const innerEarGeo = new THREE.SphereGeometry(0.06, 10, 10);
+  const leftIE = new THREE.Mesh(innerEarGeo, lightMat);
+  leftIE.scale.set(1, 0.7, 0.7);
+  leftIE.position.set(-0.26, 1.02, 0.06);
+  group.add(leftIE);
+  const rightIE = new THREE.Mesh(innerEarGeo, lightMat);
+  rightIE.scale.set(1, 0.7, 0.7);
+  rightIE.position.set(0.26, 1.02, 0.06);
+  group.add(rightIE);
+
+  function createArm(x, zRot, xRot) {
+    const armGroup = new THREE.Group();
+    const armGeo = new THREE.CylinderGeometry(0.055, 0.075, 0.32, 10);
+    const arm = new THREE.Mesh(armGeo, furMat);
+    arm.position.y = 0.16;
+    arm.castShadow = true;
+    armGroup.add(arm);
+
+    const pawGeo = new THREE.SphereGeometry(0.065, 8, 8);
+    const paw = new THREE.Mesh(pawGeo, darkMat);
+    paw.scale.set(1, 0.5, 0.8);
+    paw.position.set(0, 0, 0.06);
+    armGroup.add(paw);
+
+    armGroup.position.set(x, 0.32, 0);
+    armGroup.rotation.z = zRot;
+    armGroup.rotation.x = xRot;
+    return armGroup;
+  }
+  group.add(createArm(-0.52, 0.15, -0.4));
+  group.add(createArm(0.52, -0.15, 0.4));
+
+  function createLeg(x) {
+    const legGroup = new THREE.Group();
+    const legGeo = new THREE.CylinderGeometry(0.075, 0.095, 0.32, 10);
+    const leg = new THREE.Mesh(legGeo, furMat);
+    leg.position.y = 0.16;
+    leg.castShadow = true;
+    legGroup.add(leg);
+
+    const footGeo = new THREE.SphereGeometry(0.07, 8, 8);
+    const foot = new THREE.Mesh(footGeo, darkMat);
+    foot.scale.set(1.2, 0.4, 0.8);
+    foot.position.set(0, 0, 0.05);
+    legGroup.add(foot);
+
+    legGroup.position.set(x, -0.35, 0);
+    return legGroup;
+  }
+  group.add(createLeg(-0.18));
+  group.add(createLeg(0.18));
+
+  const tailGeo = new THREE.SphereGeometry(0.06, 10, 10);
+  const tail = new THREE.Mesh(tailGeo, furMat);
+  tail.position.set(0, 0.05, -0.45);
+  tail.scale.set(1, 0.8, 0.6);
+  group.add(tail);
+
+  const blushMat = new THREE.MeshStandardMaterial({
+    color: 0xE8A0A0, roughness: 0.9, metalness: 0.0, transparent: true, opacity: 0.25,
+  });
+  const blushGeo = new THREE.SphereGeometry(0.06, 10, 10);
+  const leftBlush = new THREE.Mesh(blushGeo, blushMat);
+  leftBlush.scale.set(1.3, 0.8, 0.5);
+  leftBlush.position.set(-0.18, 0.7, 0.28);
+  group.add(leftBlush);
+  const rightBlush = new THREE.Mesh(blushGeo, blushMat);
+  rightBlush.scale.set(1.3, 0.8, 0.5);
+  rightBlush.position.set(0.18, 0.7, 0.28);
+  group.add(rightBlush);
+
+  const mouthMat = new THREE.MeshStandardMaterial({
+    color: 0x5a3a2a, roughness: 0.8, metalness: 0.0,
+  });
+  const mouthGeo = new THREE.TorusGeometry(0.025, 0.008, 6, 8, Math.PI);
+  const mouth = new THREE.Mesh(mouthGeo, mouthMat);
+  mouth.rotation.x = -0.2;
+  mouth.rotation.z = 0.1;
+  mouth.position.set(0, 0.72, 0.38);
+  group.add(mouth);
+
+  return group;
+}
+
+const bear = createBear();
+bear.position.set(0, -0.5, 0);
+scene.add(bear);
+
+// ============================================================
+// 7. FLASHLIGHT & SPOTLIGHT
+// ============================================================
+function createFlashlightModel() {
+  const group = new THREE.Group();
+
+  const bodyMat = new THREE.MeshStandardMaterial({
+    color: 0x4a4a4a, roughness: 0.3, metalness: 0.7,
+  });
+  const bodyGeo = new THREE.CylinderGeometry(0.07, 0.09, 0.28, 14);
+  const body = new THREE.Mesh(bodyGeo, bodyMat);
+  body.rotation.x = Math.PI / 2;
+  body.position.z = 0.14;
+  group.add(body);
+
+  const headMat = new THREE.MeshStandardMaterial({
+    color: 0x3a3a3a, roughness: 0.25, metalness: 0.8,
+  });
+  const headGeo = new THREE.CylinderGeometry(0.11, 0.07, 0.07, 14);
+  const head = new THREE.Mesh(headGeo, headMat);
+  head.rotation.x = Math.PI / 2;
+  head.position.z = 0.32;
+  group.add(head);
+
+  const lensMat = new THREE.MeshStandardMaterial({
+    color: 0xffeecc, roughness: 0.05, metalness: 0.0,
+    emissive: 0xffeecc, emissiveIntensity: 0.4,
+  });
+  const lensGeo = new THREE.CircleGeometry(0.11, 14);
+  const lens = new THREE.Mesh(lensGeo, lensMat);
+  lens.position.z = 0.36;
+  group.add(lens);
+
+  const gripMat = new THREE.MeshStandardMaterial({
+    color: 0x333333, roughness: 0.95, metalness: 0.0,
+  });
+  for (let i = 0; i < 3; i++) {
+    const gripGeo = new THREE.TorusGeometry(0.08, 0.015, 6, 14);
+    const grip = new THREE.Mesh(gripGeo, gripMat);
+    grip.rotation.y = Math.PI / 2;
+    grip.position.z = 0.05 + i * 0.06;
+    group.add(grip);
+  }
+
+  const switchMat = new THREE.MeshStandardMaterial({
+    color: 0xcc3333, roughness: 0.4, metalness: 0.3,
+  });
+  const switchGeo = new THREE.BoxGeometry(0.02, 0.03, 0.015);
+  const switchBtn = new THREE.Mesh(switchGeo, switchMat);
+  switchBtn.position.set(0.05, 0.08, 0.15);
+  group.add(switchBtn);
+
+  group.scale.set(1.2, 1.2, 1.2);
+  return group;
+}
+
+const flashlight = createFlashlightModel();
+scene.add(flashlight);
+
+const spotlight = new THREE.SpotLight(0xffeedd, 45, 16, Math.PI / 4.5, 0.5, 1.5);
+spotlight.castShadow = true;
+spotlight.shadow.mapSize.width = 4096;
+spotlight.shadow.mapSize.height = 4096;
+spotlight.shadow.camera.near = 0.3;
+spotlight.shadow.camera.far = 16;
+spotlight.shadow.camera.fov = 40;
+spotlight.shadow.bias = -0.001;
+spotlight.shadow.normalBias = 0.015;
+spotlight.shadow.radius = 2.5;
+scene.add(spotlight);
+
+const spotTarget = new THREE.Object3D();
+spotTarget.position.set(0, 0.3, -2.8);
+scene.add(spotTarget);
+spotlight.target = spotTarget;
+
+const pointLight = new THREE.PointLight(0xffeedd, 0.8, 4, 2);
+scene.add(pointLight);
+
+// ============================================================
+// 8. VISIBLE LIGHT BEAM
+// ============================================================
+function createLightBeam() {
+  const beamMat = new THREE.MeshBasicMaterial({
+    color: 0xffffcc,
+    transparent: true,
+    opacity: 0.12,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const beamGeo = new THREE.ConeGeometry(0.3, 3.5, 24, 1, true);
+  const beam = new THREE.Mesh(beamGeo, beamMat);
+  return beam;
+}
+
+const lightBeam = createLightBeam();
+scene.add(lightBeam);
+
+function createInnerBeam() {
+  const beamMat = new THREE.MeshBasicMaterial({
+    color: 0xffffaa,
+    transparent: true,
+    opacity: 0.06,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const beamGeo = new THREE.ConeGeometry(0.12, 3.5, 16, 1, true);
+  const beam = new THREE.Mesh(beamGeo, beamMat);
+  return beam;
+}
+
+const innerBeam = createInnerBeam();
+scene.add(innerBeam);
+
+// ============================================================
+// 9. FLASHLIGHT SPHERICAL CONTROL
+// ============================================================
+let theta = 0.3;
+let phi = 0.9;
+let FL_RADIUS = 3.2;
+const FL_RADIUS_MIN = 0.8;
+const FL_RADIUS_MAX = 6.0;
+const BEAM_TARGET = new THREE.Vector3(0, 0.3, -2.8);
+const UP_VECTOR = new THREE.Vector3(0, 1, 0);
+
+function updateFlashlightPosition() {
+  const x = FL_RADIUS * Math.sin(phi) * Math.cos(theta);
+  const y = FL_RADIUS * Math.cos(phi);
+  const z = FL_RADIUS * Math.sin(phi) * Math.sin(theta) + 0.3;
+
+  flashlight.position.set(x, y, z);
+  spotlight.position.set(x, y, z);
+  pointLight.position.set(x, y, z);
+
+  flashlight.lookAt(BEAM_TARGET);
+
+  const dir = new THREE.Vector3().copy(BEAM_TARGET).sub(flashlight.position);
+  const dist = dir.length();
+  const dirNorm = dir.clone().normalize();
+
+  lightBeam.quaternion.setFromUnitVectors(UP_VECTOR, dirNorm);
+  lightBeam.position.copy(flashlight.position).add(dir.clone().multiplyScalar(0.5));
+  lightBeam.scale.set(1, dist / 3.5, 1);
+
+  innerBeam.quaternion.setFromUnitVectors(UP_VECTOR, dirNorm);
+  innerBeam.position.copy(flashlight.position).add(dir.clone().multiplyScalar(0.5));
+  innerBeam.scale.set(1, dist / 3.5, 1);
+
+  const beamOpacity = Math.max(0.04, 0.15 - dist * 0.008);
+  lightBeam.material.opacity = beamOpacity;
+  innerBeam.material.opacity = beamOpacity * 0.5;
+}
+
+updateFlashlightPosition();
+
+// ============================================================
+// 10. ORBIT CONTROLS
+// ============================================================
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.target.set(0, 0.3, -1.0);
+controls.enableDamping = true;
+controls.dampingFactor = 0.08;
+controls.minDistance = 0.2;
+controls.maxDistance = 9.0;
+controls.maxPolarAngle = Math.PI / 2.05;
+controls.minPolarAngle = 0.1;
+controls.mouseButtons = {
+  LEFT: null,
+  MIDDLE: THREE.MOUSE.DOLLY,
+  RIGHT: THREE.MOUSE.ROTATE,
+};
+controls.touches = {
+  ONE: THREE.TOUCH.PAN,
+  TWO: THREE.TOUCH.DOLLY_PAN,
+};
+controls.update();
+
+// ============================================================
+// 11. FLASHLIGHT DRAGGING
+// ============================================================
+let isDragging = false;
+let prevMouseX = 0;
+let prevMouseY = 0;
+
+function onPointerDown(event) {
+  if (event.button === 0) {
+    isDragging = true;
+    prevMouseX = event.clientX;
+    prevMouseY = event.clientY;
+    renderer.domElement.style.cursor = 'grabbing';
+  }
+}
+
+function onPointerMove(event) {
+  if (isDragging) {
+    const dx = event.clientX - prevMouseX;
+    const dy = event.clientY - prevMouseY;
+
+    theta -= dx * 0.008;
+    phi += dy * 0.008;
+    phi = Math.max(0.15, Math.min(Math.PI - 0.15, phi));
+
+    updateFlashlightPosition();
+    controls.update();
+
+    prevMouseX = event.clientX;
+    prevMouseY = event.clientY;
+  }
+}
+
+function onPointerUp() {
+  isDragging = false;
+  renderer.domElement.style.cursor = 'default';
+}
+
+renderer.domElement.addEventListener('mousedown', onPointerDown);
+window.addEventListener('mousemove', onPointerMove);
+window.addEventListener('mouseup', onPointerUp);
+
+let touchId = null;
+renderer.domElement.addEventListener('touchstart', (e) => {
+  if (e.touches.length === 1) {
+    const touch = e.touches[0];
+    touchId = touch.identifier;
+    isDragging = true;
+    prevMouseX = touch.clientX;
+    prevMouseY = touch.clientY;
+  }
+}, { passive: true });
+
+renderer.domElement.addEventListener('touchmove', (e) => {
+  if (isDragging && touchId !== null) {
+    for (let i = 0; i < e.touches.length; i++) {
+      if (e.touches[i].identifier === touchId) {
+        const touch = e.touches[i];
+        const dx = touch.clientX - prevMouseX;
+        const dy = touch.clientY - prevMouseY;
+
+        theta -= dx * 0.008;
+        phi += dy * 0.008;
+        phi = Math.max(0.15, Math.min(Math.PI - 0.15, phi));
+
+        updateFlashlightPosition();
+
+        prevMouseX = touch.clientX;
+        prevMouseY = touch.clientY;
+        break;
+      }
+    }
+  }
+}, { passive: true });
+
+renderer.domElement.addEventListener('touchend', () => {
+  isDragging = false;
+  touchId = null;
+}, { passive: true });
+
+// ============================================================
+// 12. ANIMATION
+// ============================================================
+let breatheTime = 0;
+
+window.addEventListener('resize', () => {
+  const w = window.innerWidth;
+  const h = window.innerHeight;
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+  renderer.setSize(w, h);
+  controls.update();
+});
+
+setTimeout(() => {
+  document.getElementById('loading').classList.add('hidden');
+}, 600);
+
+function animate() {
+  requestAnimationFrame(animate);
+
+  breatheTime += 0.02;
+  const breathe = Math.sin(breatheTime) * 0.004;
+
+  bear.position.y = -0.5 + breathe;
+  bear.scale.y = 1 + Math.sin(breatheTime) * 0.002;
+
+  const flicker = 1 + (Math.random() - 0.5) * 0.015;
+  spotlight.intensity = 45 * flicker;
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+
+animate();
+
+// ============================================================
+// 13. KEYBOARD SHORTCUTS
+// ============================================================
+let distanceHintTimeout = null;
+
+window.addEventListener('keydown', (e) => {
+  if (e.key === 'r' || e.key === 'R') {
+    theta = 0.3;
+    phi = 0.9;
+    FL_RADIUS = 3.2;
+    updateFlashlightPosition();
+  }
+  if (e.key === 'c' || e.key === 'C') {
+    camera.position.set(3.5, 2.2, 5.5);
+    controls.target.set(0, 0.3, -1.0);
+    controls.update();
+  }
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    FL_RADIUS = Math.max(FL_RADIUS_MIN, FL_RADIUS - 0.3);
+    updateFlashlightPosition();
+    showDistanceHint();
+  }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    FL_RADIUS = Math.min(FL_RADIUS_MAX, FL_RADIUS + 0.3);
+    updateFlashlightPosition();
+    showDistanceHint();
+  }
+});
+
+function showDistanceHint() {
+  const hint = document.getElementById('distance-hint') || (() => {
+    const el = document.createElement('div');
+    el.id = 'distance-hint';
+    el.style.cssText = `
+      position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
+      color:rgba(255,255,255,0.6); font-size:13px;
+      background:rgba(0,0,0,0.5); padding:6px 16px; border-radius:8px;
+      backdrop-filter:blur(4px); border:1px solid rgba(255,255,255,0.08);
+      pointer-events:none; z-index:20; transition:opacity 0.3s;
+    `;
+    document.body.appendChild(el);
+    return el;
+  })();
+  hint.textContent = `手电筒距离: ${FL_RADIUS.toFixed(1)} 单位`;
+  hint.style.opacity = '1';
+  clearTimeout(distanceHintTimeout);
+  distanceHintTimeout = setTimeout(() => { hint.style.opacity = '0'; }, 2000);
+}
+
+console.log('🔦 影子探险已启动！');
+console.log('左键拖动: 移动手电筒 | 右键拖动: 旋转视角 | 滚轮: 缩放');
+console.log('↑/↓: 手电筒前后移动 | R: 重置手电筒 | C: 重置相机');
+  </script>
+</body>
+</html>
