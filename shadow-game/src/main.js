@@ -253,140 +253,182 @@ floor.receiveShadow = true;
 scene.add(floor);
 
 // ============================================================
-// 6. BEAR - Image-based with background removal
+// 6. BEAR - Detailed Teddy Bear Model
 // ============================================================
-let bearMesh = null;
-let bearShadowMesh = null;
-
-function processBearImage(image) {
-  const canvas = document.createElement('canvas');
-  const maxSize = 1024;
-  let w = image.width;
-  let h = image.height;
-  if (w > maxSize) {
-    h = Math.round(h * (maxSize / w));
-    w = maxSize;
-  }
-  if (h > maxSize) {
-    w = Math.round(w * (maxSize / h));
-    h = maxSize;
-  }
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-
-  ctx.drawImage(image, 0, 0, w, h);
-
-  const imageData = ctx.getImageData(0, 0, w, h);
-  const data = imageData.data;
-
-  const threshold = 240;
-  const softRange = 30;
-
-  for (let i = 0; i < data.length; i += 4) {
-    const r = data[i];
-    const g = data[i + 1];
-    const b = data[i + 2];
-
-    const maxC = Math.max(r, g, b);
-    const minC = Math.min(r, g, b);
-
-    if (maxC > threshold && (maxC - minC) < 25) {
-      data[i + 3] = 0;
-    } else if (maxC > threshold - softRange) {
-      const t = (maxC - (threshold - softRange)) / softRange;
-      data[i + 3] = Math.round(data[i + 3] * t);
-      const shade = 255 - Math.round(t * 40);
-      data[i] = Math.min(r, shade);
-      data[i + 1] = Math.min(g, shade);
-      data[i + 2] = Math.min(b, shade);
-    }
-  }
-
-  ctx.putImageData(imageData, 0, 0);
-  return canvas;
-}
-
-function createBearFromImage(imageUrl) {
-  return new Promise((resolve, reject) => {
-    const loader = new THREE.ImageLoader();
-    loader.load(imageUrl, (image) => {
-      const processedCanvas = processBearImage(image);
-
-      const texture = new THREE.CanvasTexture(processedCanvas);
-      texture.needsUpdate = true;
-      texture.anisotropy = 8;
-      texture.colorSpace = THREE.SRGBColorSpace;
-
-      const aspectRatio = processedCanvas.width / processedCanvas.height;
-      const bearHeight = 2.0;
-      const bearWidth = bearHeight * aspectRatio;
-
-      const geo = new THREE.PlaneGeometry(bearWidth, bearHeight);
-      const mat = new THREE.MeshStandardMaterial({
-        map: texture,
-        transparent: true,
-        side: THREE.DoubleSide,
-        roughness: 0.7,
-        metalness: 0.0,
-        depthWrite: false,
-      });
-
-      const mesh = new THREE.Mesh(geo, mat);
-      mesh.castShadow = false;
-      mesh.receiveShadow = false;
-
-      // Shadow-only duplicate
-      const shadowMat = new THREE.ShadowMaterial({ opacity: 0.35 });
-      const shadowMesh = new THREE.Mesh(geo, shadowMat);
-      shadowMesh.castShadow = true;
-      shadowMesh.receiveShadow = false;
-      shadowMesh.scale.set(0.98, 0.98, 0.05);
-      shadowMesh.rotation.y = 0;
-
-      resolve({ mesh, shadowMesh });
-    }, undefined, reject);
-  });
-}
-
-createBearFromImage('./bear.jpg')
-  .then(({ mesh, shadowMesh }) => {
-    bearMesh = mesh;
-    bearShadowMesh = shadowMesh;
-
-    bearMesh.position.set(0, 0.15, 0);
-    bearShadowMesh.position.set(0, 0.15, -0.01);
-
-    scene.add(bearMesh);
-    scene.add(bearShadowMesh);
-
-    console.log('🐻 小熊图片加载成功');
-  })
-  .catch((err) => {
-    console.error('加载小熊图片失败，使用备用几何体:', err);
-    createFallbackBear();
-  });
-
-function createFallbackBear() {
+function createBear() {
   const group = new THREE.Group();
-  const furMat = new THREE.MeshStandardMaterial({ color: 0xC4956A, roughness: 0.85 });
-  const body = new THREE.Mesh(new THREE.SphereGeometry(0.5, 16, 16), furMat);
+
+  const furColor = 0xC4956A;
+  const furLight = 0xE8C9A0;
+  const furDark = 0x8B6914;
+  const eyeColor = 0x1a1a1a;
+  const noseColor = 0x2a1a0a;
+
+  const furMat = new THREE.MeshStandardMaterial({
+    color: furColor, roughness: 0.85, metalness: 0.0,
+  });
+  const lightMat = new THREE.MeshStandardMaterial({
+    color: furLight, roughness: 0.9, metalness: 0.0,
+  });
+  const darkMat = new THREE.MeshStandardMaterial({
+    color: furDark, roughness: 0.9, metalness: 0.0,
+  });
+  const eyeMat = new THREE.MeshStandardMaterial({
+    color: eyeColor, roughness: 0.2, metalness: 0.1,
+  });
+  const noseMat = new THREE.MeshStandardMaterial({
+    color: noseColor, roughness: 0.5, metalness: 0.0,
+  });
+  const highlightMat = new THREE.MeshStandardMaterial({
+    color: 0xffffff, roughness: 0, metalness: 0,
+  });
+
+  const bodyGeo = new THREE.SphereGeometry(0.5, 28, 28);
+  const body = new THREE.Mesh(bodyGeo, furMat);
   body.scale.set(1, 1.1, 0.85);
   body.position.y = 0.15;
   body.castShadow = true;
   group.add(body);
-  const head = new THREE.Mesh(new THREE.SphereGeometry(0.34, 16, 16), furMat);
+
+  const bellyGeo = new THREE.SphereGeometry(0.32, 20, 20);
+  const belly = new THREE.Mesh(bellyGeo, lightMat);
+  belly.scale.set(1, 0.9, 0.5);
+  belly.position.set(0, 0.1, 0.4);
+  group.add(belly);
+
+  const headGeo = new THREE.SphereGeometry(0.34, 28, 28);
+  const head = new THREE.Mesh(headGeo, furMat);
   head.position.y = 0.78;
   head.castShadow = true;
   group.add(head);
-  const eyeMat = new THREE.MeshStandardMaterial({ color: 0x111111 });
-  const eyeGeo = new THREE.SphereGeometry(0.04, 8, 8);
-  const le = new THREE.Mesh(eyeGeo, eyeMat); le.position.set(-0.13, 0.84, 0.32); group.add(le);
-  const re = new THREE.Mesh(eyeGeo, eyeMat); re.position.set(0.13, 0.84, 0.32); group.add(re);
-  group.position.set(0, -0.5, 0);
-  bearMesh = group;
-  scene.add(group);
+
+  const snoutGeo = new THREE.SphereGeometry(0.1, 16, 16);
+  const snout = new THREE.Mesh(snoutGeo, lightMat);
+  snout.scale.set(1.2, 0.8, 0.6);
+  snout.position.set(0, 0.76, 0.32);
+  group.add(snout);
+
+  const noseGeo = new THREE.SphereGeometry(0.035, 10, 10);
+  const nose = new THREE.Mesh(noseGeo, noseMat);
+  nose.scale.set(1, 0.7, 0.8);
+  nose.position.set(0, 0.75, 0.38);
+  group.add(nose);
+
+  const eyeGeo = new THREE.SphereGeometry(0.042, 12, 12);
+  const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
+  leftEye.position.set(-0.13, 0.84, 0.32);
+  group.add(leftEye);
+  const rightEye = new THREE.Mesh(eyeGeo, eyeMat);
+  rightEye.position.set(0.13, 0.84, 0.32);
+  group.add(rightEye);
+
+  const hlGeo = new THREE.SphereGeometry(0.014, 8, 8);
+  const leftHL = new THREE.Mesh(hlGeo, highlightMat);
+  leftHL.position.set(-0.11, 0.86, 0.36);
+  group.add(leftHL);
+  const rightHL = new THREE.Mesh(hlGeo, highlightMat);
+  rightHL.position.set(0.15, 0.86, 0.36);
+  group.add(rightHL);
+
+  const earGeo = new THREE.SphereGeometry(0.12, 16, 16);
+  const leftEar = new THREE.Mesh(earGeo, furMat);
+  leftEar.scale.set(1, 0.8, 0.8);
+  leftEar.position.set(-0.26, 1.04, 0);
+  leftEar.castShadow = true;
+  group.add(leftEar);
+  const rightEar = new THREE.Mesh(earGeo, furMat);
+  rightEar.scale.set(1, 0.8, 0.8);
+  rightEar.position.set(0.26, 1.04, 0);
+  rightEar.castShadow = true;
+  group.add(rightEar);
+
+  const innerEarGeo = new THREE.SphereGeometry(0.06, 10, 10);
+  const leftIE = new THREE.Mesh(innerEarGeo, lightMat);
+  leftIE.scale.set(1, 0.7, 0.7);
+  leftIE.position.set(-0.26, 1.02, 0.06);
+  group.add(leftIE);
+  const rightIE = new THREE.Mesh(innerEarGeo, lightMat);
+  rightIE.scale.set(1, 0.7, 0.7);
+  rightIE.position.set(0.26, 1.02, 0.06);
+  group.add(rightIE);
+
+  function createArm(x, zRot, xRot) {
+    const armGroup = new THREE.Group();
+    const armGeo = new THREE.CylinderGeometry(0.055, 0.075, 0.32, 10);
+    const arm = new THREE.Mesh(armGeo, furMat);
+    arm.position.y = 0.16;
+    arm.castShadow = true;
+    armGroup.add(arm);
+
+    const pawGeo = new THREE.SphereGeometry(0.065, 8, 8);
+    const paw = new THREE.Mesh(pawGeo, darkMat);
+    paw.scale.set(1, 0.5, 0.8);
+    paw.position.set(0, 0, 0.06);
+    armGroup.add(paw);
+
+    armGroup.position.set(x, 0.32, 0);
+    armGroup.rotation.z = zRot;
+    armGroup.rotation.x = xRot;
+    return armGroup;
+  }
+  group.add(createArm(-0.52, 0.15, -0.4));
+  group.add(createArm(0.52, -0.15, 0.4));
+
+  function createLeg(x) {
+    const legGroup = new THREE.Group();
+    const legGeo = new THREE.CylinderGeometry(0.075, 0.095, 0.32, 10);
+    const leg = new THREE.Mesh(legGeo, furMat);
+    leg.position.y = 0.16;
+    leg.castShadow = true;
+    legGroup.add(leg);
+
+    const footGeo = new THREE.SphereGeometry(0.07, 8, 8);
+    const foot = new THREE.Mesh(footGeo, darkMat);
+    foot.scale.set(1.2, 0.4, 0.8);
+    foot.position.set(0, 0, 0.05);
+    legGroup.add(foot);
+
+    legGroup.position.set(x, -0.35, 0);
+    return legGroup;
+  }
+  group.add(createLeg(-0.18));
+  group.add(createLeg(0.18));
+
+  const tailGeo = new THREE.SphereGeometry(0.06, 10, 10);
+  const tail = new THREE.Mesh(tailGeo, furMat);
+  tail.position.set(0, 0.05, -0.45);
+  tail.scale.set(1, 0.8, 0.6);
+  group.add(tail);
+
+  const blushMat = new THREE.MeshStandardMaterial({
+    color: 0xE8A0A0, roughness: 0.9, metalness: 0.0, transparent: true, opacity: 0.25,
+  });
+  const blushGeo = new THREE.SphereGeometry(0.06, 10, 10);
+  const leftBlush = new THREE.Mesh(blushGeo, blushMat);
+  leftBlush.scale.set(1.3, 0.8, 0.5);
+  leftBlush.position.set(-0.18, 0.7, 0.28);
+  group.add(leftBlush);
+  const rightBlush = new THREE.Mesh(blushGeo, blushMat);
+  rightBlush.scale.set(1.3, 0.8, 0.5);
+  rightBlush.position.set(0.18, 0.7, 0.28);
+  group.add(rightBlush);
+
+  const mouthMat = new THREE.MeshStandardMaterial({
+    color: 0x5a3a2a, roughness: 0.8, metalness: 0.0,
+  });
+  const mouthGeo = new THREE.TorusGeometry(0.025, 0.008, 6, 8, Math.PI);
+  const mouth = new THREE.Mesh(mouthGeo, mouthMat);
+  mouth.rotation.x = -0.2;
+  mouth.rotation.z = 0.1;
+  mouth.position.set(0, 0.72, 0.38);
+  group.add(mouth);
+
+  return group;
 }
+
+const bear = createBear();
+bear.position.set(0, -0.5, 0);
+scene.add(bear);
 
 // ============================================================
 // 7. FLASHLIGHT & SPOTLIGHT
@@ -671,14 +713,8 @@ function animate() {
   breatheTime += 0.02;
   const breathe = Math.sin(breatheTime) * 0.004;
 
-  if (bearMesh) {
-    bearMesh.position.y = 0.15 + breathe;
-    bearMesh.lookAt(camera.position);
-  }
-  if (bearShadowMesh) {
-    bearShadowMesh.position.y = 0.15 + breathe;
-    bearShadowMesh.lookAt(camera.position);
-  }
+  bear.position.y = -0.5 + breathe;
+  bear.scale.y = 1 + Math.sin(breatheTime) * 0.002;
 
   const flicker = 1 + (Math.random() - 0.5) * 0.015;
   spotlight.intensity = 45 * flicker;
