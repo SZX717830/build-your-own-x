@@ -35,14 +35,18 @@ try {
 // ============================================================
 // 2. LIGHTING
 // ============================================================
-// Very dim ambient for minimal visibility
-const ambient = new THREE.AmbientLight(0x1a1a3a, 0.06);
+// Moderate ambient for visibility
+const ambient = new THREE.AmbientLight(0x1a1a3a, 0.15);
 scene.add(ambient);
 
 // A subtle fill from the front
-const fillLight = new THREE.DirectionalLight(0x446688, 0.08);
+const fillLight = new THREE.DirectionalLight(0x446688, 0.15);
 fillLight.position.set(0, 3, 5);
 scene.add(fillLight);
+
+// Hemisphere light for subtle ambient color
+const hemiLight = new THREE.HemisphereLight(0x446688, 0x222244, 0.1);
+scene.add(hemiLight);
 
 // ============================================================
 // 3. WALL
@@ -53,11 +57,9 @@ function createWallTexture() {
   canvas.height = 512;
   const ctx = canvas.getContext('2d');
 
-  // Base plaster color
   ctx.fillStyle = '#c8c0b8';
   ctx.fillRect(0, 0, 512, 512);
 
-  // Subtle noise texture
   for (let i = 0; i < 8000; i++) {
     const x = Math.random() * 512;
     const y = Math.random() * 512;
@@ -66,7 +68,6 @@ function createWallTexture() {
     ctx.fillRect(x, y, 3, 3);
   }
 
-  // Horizontal brush strokes
   ctx.globalAlpha = 0.06;
   for (let i = 0; i < 30; i++) {
     const y = Math.random() * 512;
@@ -79,7 +80,6 @@ function createWallTexture() {
     ctx.stroke();
   }
 
-  // A few subtle imperfections
   ctx.globalAlpha = 0.1;
   for (let i = 0; i < 15; i++) {
     const x = Math.random() * 512;
@@ -117,7 +117,6 @@ scene.add(wall);
 function createPictureFrame() {
   const group = new THREE.Group();
 
-  // Frame
   const frameMat = new THREE.MeshStandardMaterial({
     color: 0x6b3a2a,
     roughness: 0.5,
@@ -128,7 +127,6 @@ function createPictureFrame() {
   const frame = new THREE.Mesh(frameGeo, frameMat);
   group.add(frame);
 
-  // Inner frame (lighter)
   const innerMat = new THREE.MeshStandardMaterial({
     color: 0x8b6b4a,
     roughness: 0.4,
@@ -139,24 +137,20 @@ function createPictureFrame() {
   inner.position.z = -depth * 0.25;
   group.add(inner);
 
-  // Picture - simple landscape
   const picCanvas = document.createElement('canvas');
   picCanvas.width = 256;
   picCanvas.height = 180;
   const pctx = picCanvas.getContext('2d');
-  // Sky gradient
   const skyGrad = pctx.createLinearGradient(0, 0, 0, 180);
   skyGrad.addColorStop(0, '#87CEEB');
   skyGrad.addColorStop(0.6, '#B0E0E6');
   skyGrad.addColorStop(1, '#98FB98');
   pctx.fillStyle = skyGrad;
   pctx.fillRect(0, 0, 256, 180);
-  // Sun
   pctx.fillStyle = '#FFD700';
   pctx.beginPath();
   pctx.arc(200, 40, 25, 0, Math.PI * 2);
   pctx.fill();
-  // Mountains
   pctx.fillStyle = '#556B2F';
   pctx.beginPath();
   pctx.moveTo(0, 140);
@@ -168,7 +162,6 @@ function createPictureFrame() {
   pctx.lineTo(0, 180);
   pctx.closePath();
   pctx.fill();
-  // Snow caps
   pctx.fillStyle = '#FFFFFF';
   pctx.beginPath();
   pctx.moveTo(55, 65);
@@ -204,19 +197,15 @@ function createFloorTexture() {
   canvas.height = 512;
   const ctx = canvas.getContext('2d');
 
-  // Base wood color
   ctx.fillStyle = '#4a3528';
   ctx.fillRect(0, 0, 512, 512);
 
-  // Wood plank lines
   for (let p = 0; p < 6; p++) {
     const py = p * 85 + 10;
-    // Plank base
     const plankColor = 60 + Math.random() * 30;
     ctx.fillStyle = `rgb(${plankColor + 10}, ${plankColor}, ${plankColor - 5})`;
     ctx.fillRect(0, py, 512, 80);
 
-    // Wood grain
     for (let i = 0; i < 40; i++) {
       const gy = py + Math.random() * 80;
       const gbright = 50 + Math.random() * 40;
@@ -229,7 +218,6 @@ function createFloorTexture() {
       ctx.stroke();
     }
 
-    // Plank gap
     ctx.strokeStyle = 'rgba(30,20,15,0.5)';
     ctx.lineWidth = 1.5;
     ctx.beginPath();
@@ -237,7 +225,6 @@ function createFloorTexture() {
     ctx.lineTo(512, py + 80);
     ctx.stroke();
 
-    // Nail holes
     for (let n = 0; n < 4; n++) {
       const nx = 60 + n * 130 + Math.random() * 20;
       ctx.fillStyle = 'rgba(20,15,10,0.4)';
@@ -299,7 +286,6 @@ function createBear() {
     color: 0xffffff, roughness: 0, metalness: 0,
   });
 
-  // --- Body ---
   const bodyGeo = new THREE.SphereGeometry(0.5, 28, 28);
   const body = new THREE.Mesh(bodyGeo, furMat);
   body.scale.set(1, 1.1, 0.85);
@@ -307,35 +293,30 @@ function createBear() {
   body.castShadow = true;
   group.add(body);
 
-  // Belly patch
   const bellyGeo = new THREE.SphereGeometry(0.32, 20, 20);
   const belly = new THREE.Mesh(bellyGeo, lightMat);
   belly.scale.set(1, 0.9, 0.5);
   belly.position.set(0, 0.1, 0.4);
   group.add(belly);
 
-  // --- Head ---
   const headGeo = new THREE.SphereGeometry(0.34, 28, 28);
   const head = new THREE.Mesh(headGeo, furMat);
   head.position.y = 0.78;
   head.castShadow = true;
   group.add(head);
 
-  // Snout
   const snoutGeo = new THREE.SphereGeometry(0.1, 16, 16);
   const snout = new THREE.Mesh(snoutGeo, lightMat);
   snout.scale.set(1.2, 0.8, 0.6);
   snout.position.set(0, 0.76, 0.32);
   group.add(snout);
 
-  // Nose
   const noseGeo = new THREE.SphereGeometry(0.035, 10, 10);
   const nose = new THREE.Mesh(noseGeo, noseMat);
   nose.scale.set(1, 0.7, 0.8);
   nose.position.set(0, 0.75, 0.38);
   group.add(nose);
 
-  // Eyes
   const eyeGeo = new THREE.SphereGeometry(0.042, 12, 12);
   const leftEye = new THREE.Mesh(eyeGeo, eyeMat);
   leftEye.position.set(-0.13, 0.84, 0.32);
@@ -344,7 +325,6 @@ function createBear() {
   rightEye.position.set(0.13, 0.84, 0.32);
   group.add(rightEye);
 
-  // Eye highlights (shiny)
   const hlGeo = new THREE.SphereGeometry(0.014, 8, 8);
   const leftHL = new THREE.Mesh(hlGeo, highlightMat);
   leftHL.position.set(-0.11, 0.86, 0.36);
@@ -353,18 +333,18 @@ function createBear() {
   rightHL.position.set(0.15, 0.86, 0.36);
   group.add(rightHL);
 
-  // --- Ears ---
   const earGeo = new THREE.SphereGeometry(0.12, 16, 16);
   const leftEar = new THREE.Mesh(earGeo, furMat);
   leftEar.scale.set(1, 0.8, 0.8);
   leftEar.position.set(-0.26, 1.04, 0);
+  leftEar.castShadow = true;
   group.add(leftEar);
   const rightEar = new THREE.Mesh(earGeo, furMat);
   rightEar.scale.set(1, 0.8, 0.8);
   rightEar.position.set(0.26, 1.04, 0);
+  rightEar.castShadow = true;
   group.add(rightEar);
 
-  // Inner ears
   const innerEarGeo = new THREE.SphereGeometry(0.06, 10, 10);
   const leftIE = new THREE.Mesh(innerEarGeo, lightMat);
   leftIE.scale.set(1, 0.7, 0.7);
@@ -375,7 +355,6 @@ function createBear() {
   rightIE.position.set(0.26, 1.02, 0.06);
   group.add(rightIE);
 
-  // --- Arms ---
   function createArm(x, zRot, xRot) {
     const armGroup = new THREE.Group();
     const armGeo = new THREE.CylinderGeometry(0.055, 0.075, 0.32, 10);
@@ -384,7 +363,6 @@ function createBear() {
     arm.castShadow = true;
     armGroup.add(arm);
 
-    // Paw pad
     const pawGeo = new THREE.SphereGeometry(0.065, 8, 8);
     const paw = new THREE.Mesh(pawGeo, darkMat);
     paw.scale.set(1, 0.5, 0.8);
@@ -399,7 +377,6 @@ function createBear() {
   group.add(createArm(-0.52, 0.15, -0.4));
   group.add(createArm(0.52, -0.15, 0.4));
 
-  // --- Legs ---
   function createLeg(x) {
     const legGroup = new THREE.Group();
     const legGeo = new THREE.CylinderGeometry(0.075, 0.095, 0.32, 10);
@@ -408,7 +385,6 @@ function createBear() {
     leg.castShadow = true;
     legGroup.add(leg);
 
-    // Foot pad
     const footGeo = new THREE.SphereGeometry(0.07, 8, 8);
     const foot = new THREE.Mesh(footGeo, darkMat);
     foot.scale.set(1.2, 0.4, 0.8);
@@ -421,14 +397,12 @@ function createBear() {
   group.add(createLeg(-0.18));
   group.add(createLeg(0.18));
 
-  // --- Tail (small puff) ---
   const tailGeo = new THREE.SphereGeometry(0.06, 10, 10);
   const tail = new THREE.Mesh(tailGeo, furMat);
   tail.position.set(0, 0.05, -0.45);
   tail.scale.set(1, 0.8, 0.6);
   group.add(tail);
 
-  // --- Cheek blush ---
   const blushMat = new THREE.MeshStandardMaterial({
     color: 0xE8A0A0, roughness: 0.9, metalness: 0.0, transparent: true, opacity: 0.25,
   });
@@ -442,7 +416,6 @@ function createBear() {
   rightBlush.position.set(0.18, 0.7, 0.28);
   group.add(rightBlush);
 
-  // --- Mouth (subtle smile) ---
   const mouthMat = new THREE.MeshStandardMaterial({
     color: 0x5a3a2a, roughness: 0.8, metalness: 0.0,
   });
@@ -457,7 +430,6 @@ function createBear() {
 }
 
 const bear = createBear();
-// Floor at y=-0.85, bear feet at y=-0.35 relative to group, so offset by -0.5
 bear.position.set(0, -0.5, 0);
 scene.add(bear);
 
@@ -467,7 +439,6 @@ scene.add(bear);
 function createFlashlightModel() {
   const group = new THREE.Group();
 
-  // Body (main cylinder)
   const bodyMat = new THREE.MeshStandardMaterial({
     color: 0x4a4a4a, roughness: 0.3, metalness: 0.7,
   });
@@ -477,7 +448,6 @@ function createFlashlightModel() {
   body.position.z = 0.14;
   group.add(body);
 
-  // Head (wider cone)
   const headMat = new THREE.MeshStandardMaterial({
     color: 0x3a3a3a, roughness: 0.25, metalness: 0.8,
   });
@@ -487,7 +457,6 @@ function createFlashlightModel() {
   head.position.z = 0.32;
   group.add(head);
 
-  // Lens
   const lensMat = new THREE.MeshStandardMaterial({
     color: 0xffeecc, roughness: 0.05, metalness: 0.0,
     emissive: 0xffeecc, emissiveIntensity: 0.4,
@@ -497,7 +466,6 @@ function createFlashlightModel() {
   lens.position.z = 0.36;
   group.add(lens);
 
-  // Handle grip rings
   const gripMat = new THREE.MeshStandardMaterial({
     color: 0x333333, roughness: 0.95, metalness: 0.0,
   });
@@ -509,7 +477,6 @@ function createFlashlightModel() {
     group.add(grip);
   }
 
-  // Switch button
   const switchMat = new THREE.MeshStandardMaterial({
     color: 0xcc3333, roughness: 0.4, metalness: 0.3,
   });
@@ -525,26 +492,23 @@ function createFlashlightModel() {
 const flashlight = createFlashlightModel();
 scene.add(flashlight);
 
-// Spotlight from the flashlight
-const spotlight = new THREE.SpotLight(0xffeedd, 35, 14, Math.PI / 5.5, 0.45, 1.5);
+const spotlight = new THREE.SpotLight(0xffeedd, 45, 16, Math.PI / 4.5, 0.5, 1.5);
 spotlight.castShadow = true;
-spotlight.shadow.mapSize.width = 2048;
-spotlight.shadow.mapSize.height = 2048;
-spotlight.shadow.camera.near = 0.5;
-spotlight.shadow.camera.far = 14;
-spotlight.shadow.camera.fov = 35;
-spotlight.shadow.bias = -0.002;
-spotlight.shadow.normalBias = 0.02;
-spotlight.shadow.radius = 4;
+spotlight.shadow.mapSize.width = 4096;
+spotlight.shadow.mapSize.height = 4096;
+spotlight.shadow.camera.near = 0.3;
+spotlight.shadow.camera.far = 16;
+spotlight.shadow.camera.fov = 40;
+spotlight.shadow.bias = -0.001;
+spotlight.shadow.normalBias = 0.015;
+spotlight.shadow.radius = 2.5;
 scene.add(spotlight);
 
-// Spotlight target (fixed on the wall behind the bear)
 const spotTarget = new THREE.Object3D();
 spotTarget.position.set(0, 0.3, -2.8);
 scene.add(spotTarget);
 spotlight.target = spotTarget;
 
-// A secondary point light near the flashlight for ambient glow
 const pointLight = new THREE.PointLight(0xffeedd, 0.8, 4, 2);
 scene.add(pointLight);
 
@@ -555,12 +519,12 @@ function createLightBeam() {
   const beamMat = new THREE.MeshBasicMaterial({
     color: 0xffffcc,
     transparent: true,
-    opacity: 0.06,
+    opacity: 0.12,
     side: THREE.DoubleSide,
     depthWrite: false,
     blending: THREE.AdditiveBlending,
   });
-  const beamGeo = new THREE.ConeGeometry(0.6, 3.5, 20, 1, true);
+  const beamGeo = new THREE.ConeGeometry(0.3, 3.5, 24, 1, true);
   const beam = new THREE.Mesh(beamGeo, beamMat);
   return beam;
 }
@@ -568,12 +532,31 @@ function createLightBeam() {
 const lightBeam = createLightBeam();
 scene.add(lightBeam);
 
+function createInnerBeam() {
+  const beamMat = new THREE.MeshBasicMaterial({
+    color: 0xffffaa,
+    transparent: true,
+    opacity: 0.06,
+    side: THREE.DoubleSide,
+    depthWrite: false,
+    blending: THREE.AdditiveBlending,
+  });
+  const beamGeo = new THREE.ConeGeometry(0.12, 3.5, 16, 1, true);
+  const beam = new THREE.Mesh(beamGeo, beamMat);
+  return beam;
+}
+
+const innerBeam = createInnerBeam();
+scene.add(innerBeam);
+
 // ============================================================
 // 9. FLASHLIGHT SPHERICAL CONTROL
 // ============================================================
-let theta = 0.3;       // horizontal angle
-let phi = 0.9;         // vertical angle (0 = top, PI = bottom)
-const FL_RADIUS = 3.2;
+let theta = 0.3;
+let phi = 0.9;
+let FL_RADIUS = 3.2;
+const FL_RADIUS_MIN = 0.8;
+const FL_RADIUS_MAX = 6.0;
 const BEAM_TARGET = new THREE.Vector3(0, 0.3, -2.8);
 const UP_VECTOR = new THREE.Vector3(0, 1, 0);
 
@@ -586,11 +569,8 @@ function updateFlashlightPosition() {
   spotlight.position.set(x, y, z);
   pointLight.position.set(x, y, z);
 
-  // Point flashlight toward the bear/wall
   flashlight.lookAt(BEAM_TARGET);
 
-  // Orient light beam cone using quaternion
-  // Cone tip is at +Y by default, rotate to point toward BEAM_TARGET
   const dir = new THREE.Vector3().copy(BEAM_TARGET).sub(flashlight.position);
   const dist = dir.length();
   const dirNorm = dir.clone().normalize();
@@ -599,22 +579,25 @@ function updateFlashlightPosition() {
   lightBeam.position.copy(flashlight.position).add(dir.clone().multiplyScalar(0.5));
   lightBeam.scale.set(1, dist / 3.5, 1);
 
-  // Update beam opacity based on distance
-  const beamOpacity = Math.max(0.02, 0.08 - dist * 0.005);
+  innerBeam.quaternion.setFromUnitVectors(UP_VECTOR, dirNorm);
+  innerBeam.position.copy(flashlight.position).add(dir.clone().multiplyScalar(0.5));
+  innerBeam.scale.set(1, dist / 3.5, 1);
+
+  const beamOpacity = Math.max(0.04, 0.15 - dist * 0.008);
   lightBeam.material.opacity = beamOpacity;
+  innerBeam.material.opacity = beamOpacity * 0.5;
 }
 
-// Initialize
 updateFlashlightPosition();
 
 // ============================================================
-// 10. ORBIT CONTROLS (right-click orbit)
+// 10. ORBIT CONTROLS
 // ============================================================
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.target.set(0, 0.3, -1.0);
 controls.enableDamping = true;
 controls.dampingFactor = 0.08;
-controls.minDistance = 2.0;
+controls.minDistance = 0.2;
 controls.maxDistance = 9.0;
 controls.maxPolarAngle = Math.PI / 2.05;
 controls.minPolarAngle = 0.1;
@@ -630,7 +613,7 @@ controls.touches = {
 controls.update();
 
 // ============================================================
-// 11. FLASHLIGHT DRAGGING (left-click)
+// 11. FLASHLIGHT DRAGGING
 // ============================================================
 let isDragging = false;
 let prevMouseX = 0;
@@ -660,7 +643,6 @@ function onPointerMove(event) {
     prevMouseX = event.clientX;
     prevMouseY = event.clientY;
   }
-  // Update cursor position
   const cursor = document.getElementById('flashlight-cursor');
   cursor.style.left = (event.clientX - 16) + 'px';
   cursor.style.top = (event.clientY - 16) + 'px';
@@ -675,7 +657,6 @@ renderer.domElement.addEventListener('mousedown', onPointerDown);
 window.addEventListener('mousemove', onPointerMove);
 window.addEventListener('mouseup', onPointerUp);
 
-// Touch support
 let touchId = null;
 renderer.domElement.addEventListener('touchstart', (e) => {
   if (e.touches.length === 1) {
@@ -709,19 +690,16 @@ renderer.domElement.addEventListener('touchmove', (e) => {
   }
 }, { passive: true });
 
-renderer.domElement.addEventListener('touchend', (e) => {
+renderer.domElement.addEventListener('touchend', () => {
   isDragging = false;
   touchId = null;
 }, { passive: true });
 
 // ============================================================
-// 12. BREATHING ANIMATION FOR BEAR
+// 12. ANIMATION
 // ============================================================
 let breatheTime = 0;
 
-// ============================================================
-// 13. WINDOW RESIZE
-// ============================================================
 window.addEventListener('resize', () => {
   const w = window.innerWidth;
   const h = window.innerHeight;
@@ -731,28 +709,20 @@ window.addEventListener('resize', () => {
   controls.update();
 });
 
-// ============================================================
-// 14. LOADING COMPLETE
-// ============================================================
 setTimeout(() => {
   document.getElementById('loading').classList.add('hidden');
 }, 600);
 
-// ============================================================
-// 15. ANIMATION LOOP
-// ============================================================
 function animate() {
   requestAnimationFrame(animate);
 
   breatheTime += 0.02;
-  // Subtle breathing
   const breathe = Math.sin(breatheTime) * 0.004;
-  bear.position.y = breathe;
+  bear.position.y = -0.5 + breathe;
   bear.scale.y = 1 + Math.sin(breatheTime) * 0.002;
 
-  // Subtle light flicker
   const flicker = 1 + (Math.random() - 0.5) * 0.015;
-  spotlight.intensity = 35 * flicker;
+  spotlight.intensity = 45 * flicker;
 
   controls.update();
   renderer.render(scene, camera);
@@ -761,23 +731,56 @@ function animate() {
 animate();
 
 // ============================================================
-// 16. KEYBOARD SHORTCUTS
+// 13. KEYBOARD SHORTCUTS
 // ============================================================
+let distanceHintTimeout = null;
+
 window.addEventListener('keydown', (e) => {
   if (e.key === 'r' || e.key === 'R') {
-    // Reset flashlight position
     theta = 0.3;
     phi = 0.9;
+    FL_RADIUS = 3.2;
     updateFlashlightPosition();
   }
   if (e.key === 'c' || e.key === 'C') {
-    // Reset camera
     camera.position.set(3.5, 2.2, 5.5);
     controls.target.set(0, 0.3, -1.0);
     controls.update();
   }
+  if (e.key === 'ArrowUp') {
+    e.preventDefault();
+    FL_RADIUS = Math.max(FL_RADIUS_MIN, FL_RADIUS - 0.3);
+    updateFlashlightPosition();
+    showDistanceHint();
+  }
+  if (e.key === 'ArrowDown') {
+    e.preventDefault();
+    FL_RADIUS = Math.min(FL_RADIUS_MAX, FL_RADIUS + 0.3);
+    updateFlashlightPosition();
+    showDistanceHint();
+  }
 });
+
+function showDistanceHint() {
+  const hint = document.getElementById('distance-hint') || (() => {
+    const el = document.createElement('div');
+    el.id = 'distance-hint';
+    el.style.cssText = `
+      position:fixed; bottom:80px; left:50%; transform:translateX(-50%);
+      color:rgba(255,255,255,0.6); font-size:13px;
+      background:rgba(0,0,0,0.5); padding:6px 16px; border-radius:8px;
+      backdrop-filter:blur(4px); border:1px solid rgba(255,255,255,0.08);
+      pointer-events:none; z-index:20; transition:opacity 0.3s;
+    `;
+    document.body.appendChild(el);
+    return el;
+  })();
+  hint.textContent = `手电筒距离: ${FL_RADIUS.toFixed(1)} 单位`;
+  hint.style.opacity = '1';
+  clearTimeout(distanceHintTimeout);
+  distanceHintTimeout = setTimeout(() => { hint.style.opacity = '0'; }, 2000);
+}
 
 console.log('🔦 影子探险已启动！');
 console.log('左键拖动: 移动手电筒 | 右键拖动: 旋转视角 | 滚轮: 缩放');
-console.log('按 R 键: 重置手电筒位置 | 按 C 键: 重置相机位置');
+console.log('↑/↓: 手电筒前后移动 | R: 重置手电筒 | C: 重置相机');
